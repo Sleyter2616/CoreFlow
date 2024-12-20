@@ -9,7 +9,9 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "npx ts-node prisma/seed.ts"
+    "prisma:seed": "npx ts-node prisma/seed.ts",
+    "seed": "ts-node prisma/seed.ts",
+    "seed:prod": "ts-node scripts/seed-prod.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
