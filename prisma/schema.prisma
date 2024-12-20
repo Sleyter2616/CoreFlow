@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Authentication Models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Core Models
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  
+  // Profile
+  height        Float?    // in cm
+  weight        Float?    // in kg
+  dateOfBirth   DateTime?
+  gender        String?
+  fitnessLevel  String?   // beginner, intermediate, advanced
+  
+  // Relations
+  workouts      Workout[]
+  workoutPlans  WorkoutPlan[]
+  progress      Progress[]
+  measurements  Measurement[]
+  subscription  Subscription?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Workout {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  type        String    // strength, cardio, hiit, etc.
+  difficulty  String    // beginner, intermediate, advanced
+  duration    Int       // in minutes
+  calories    Int?      // estimated calories burned
+  
+  exercises   WorkoutExercise[]
+  
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan        WorkoutPlan? @relation(fields: [planId], references: [id])
+  planId      String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Exercise {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  type        String    // strength, cardio, etc.
+  muscle      String[]  // targeted muscles
+  equipment   String[]  // required equipment
+  difficulty  String    // beginner, intermediate, advanced
+  
+  // Relations
+  workouts    WorkoutExercise[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkoutExercise {
+  id          String    @id @default(cuid())
+  workoutId   String
+  exerciseId  String
+  sets        Int
+  reps        Int?
+  weight      Float?    // in kg
+  duration    Int?      // in seconds
+  restTime    Int?      // in seconds
+  notes       String?
+  order       Int
+  
+  // Relations
+  workout     Workout   @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise    Exercise  @relation(fields: [exerciseId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkoutPlan {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  duration    Int       // in weeks
+  frequency   Int       // workouts per week
+  type        String    // strength, cardio, hybrid
+  difficulty  String
+  
+  // Relations
+  workouts    Workout[]
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Progress {
+  id          String    @id @default(cuid())
+  date        DateTime
+  type        String    // workout, measurement, weight, etc.
+  value       Float
+  notes       String?
+  
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Measurement {
+  id          String    @id @default(cuid())
+  date        DateTime
+  type        String    // weight, body fat, chest, waist, etc.
+  value       Float
+  unit        String    // kg, cm, etc.
+  
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Subscription {
+  id          String    @id @default(cuid())
+  type        String    // free, premium, etc.
+  status      String    // active, cancelled, etc.
+  startDate   DateTime
+  endDate     DateTime?
+  
+  // Relations
+  userId      String    @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
