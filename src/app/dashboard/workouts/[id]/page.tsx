@@ -10,54 +10,61 @@ import { notFound } from "next/navigation";
 import type { Metadata } from 'next';
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>
 }
 
-async function getWorkout(workoutId: string, email: string) {
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
-  });
-
-  if (!user) return null;
-
-  try {
-    const workout = await prisma.workout.findFirst({
-      where: { 
-        id: workoutId,
-        userId: user.id // Ensure the workout belongs to the user
-      },
-      include: {
-        exercises: {
-          include: {
-            exercise: true,
-          },
+async function getWorkout(workoutId: string, userId: string) {
+  const workout = await prisma.workout.findUnique({
+    where: {
+      id: workoutId,
+      userId: userId,
+    },
+    include: {
+      exercises: {
+        include: {
+          exercise: true,
+        },
+        orderBy: {
+          order: 'asc',
         },
       },
-    });
+    },
+  })
 
-    return workout;
-  } catch (error) {
-    console.error('Error fetching workout:', error);
-    return null;
+  if (!workout) {
+    return null
   }
+
+  return workout
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
   return {
-    title: `Workout ${params.id} | CoreFlow`,
+    title: `Workout ${id} | CoreFlow`,
   }
 }
 
 export default async function WorkoutPage({ params }: PageProps) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) return null;
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email) {
+    return notFound()
+  }
 
-  const workout = await getWorkout(params.id, session.user.email);
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    select: { id: true },
+  })
+
+  if (!user) {
+    return notFound()
+  }
+
+  const { id } = await params;
+  const workout = await getWorkout(id, user.id)
   
   if (!workout) {
-    notFound();
-    return null;
+    return notFound()
   }
 
   return (
