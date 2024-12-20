@@ -48,31 +48,33 @@ model VerificationToken {
 
 // Core Models
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
+  id           String    @id @default(cuid())
+  name         String?
+  email        String?   @unique
   emailVerified DateTime?
-  password      String?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
+  image        String?
+  password     String?
   
   // Profile
-  height        Float?    // in cm
-  weight        Float?    // in kg
-  dateOfBirth   DateTime?
-  gender        String?
-  fitnessLevel  String?   // beginner, intermediate, advanced
+  height       Float?    // in cm
+  weight       Float?    // in kg
+  dateOfBirth  DateTime?
+  gender       String?
+  fitnessLevel String?   // beginner, intermediate, advanced
+  settings     Json?
   
   // Relations
-  workouts      Workout[]
-  workoutPlans  WorkoutPlan[]
-  progress      Progress[]
-  measurements  Measurement[]
-  subscription  Subscription?
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  workouts     Workout[]
+  accounts     Account[]
+  sessions     Session[]
+  subscription Subscription?
+  measurements Measurement[]
+  personalRecords PersonalRecord[]
+  workoutPlans WorkoutPlan[]
+  progress     Progress[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Workout {
@@ -85,6 +87,7 @@ model Workout {
   calories    Int?      // estimated calories burned
   
   exercises   WorkoutExercise[]
+  personalRecords PersonalRecord[]
   
   // Relations
   userId      String
@@ -107,6 +110,7 @@ model Exercise {
   
   // Relations
   workouts    WorkoutExercise[]
+  personalRecords PersonalRecord[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -181,16 +185,36 @@ model Measurement {
 }
 
 model Subscription {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                String    @default("free")
+  status              String    @default("inactive")
+  currentPeriodStart  DateTime  @default(now())
+  currentPeriodEnd    DateTime?
+  cancelAtPeriodEnd   Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model PersonalRecord {
   id          String    @id @default(cuid())
-  type        String    // free, premium, etc.
-  status      String    // active, cancelled, etc.
-  startDate   DateTime
-  endDate     DateTime?
+  exerciseId  String
+  exercise    Exercise  @relation(fields: [exerciseId], references: [id])
+  value       Float     // The record value (weight, time, reps, etc.)
+  unit        String    // kg, seconds, reps, etc.
+  type        String    // oneRepMax, maxReps, maxWeight, etc.
+  date        DateTime  // When the record was set
+  notes       String?
   
   // Relations
-  userId      String    @unique
+  userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId   String?
+  workout     Workout? @relation(fields: [workoutId], references: [id])
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@unique([userId, exerciseId, type])
 }

@@ -31,7 +31,7 @@ export function Navbar() {
                 Dashboard
               </Link>
               <Link
-                href="/workouts"
+                href="/dashboard/workouts"
                 className="border-transparent text-gray-300 hover:text-primary-400 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
               >
                 Workouts

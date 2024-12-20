@@ -1,208 +1,193 @@
-'use client'
+import { getServerSession } from "next-auth";
+import { prisma } from "@/lib/prisma";
+import { Card } from "@/components/ui/card";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { PlusCircle, Activity, Calendar, Clock, Target, Dumbbell } from "lucide-react";
+import { authOptions } from "@/lib/auth";
+import { formatDistanceToNow } from "date-fns";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
+async function getWorkoutStats(userId: string) {
+  const totalWorkouts = await prisma.workout.count({
+    where: { userId }
+  });
 
-const mockWorkouts = [
-  {
-    id: '1',
-    name: 'Upper Body Strength',
-    type: 'Strength',
-    difficulty: 'Intermediate',
-    duration: 45,
-    calories: 320,
-    date: '2024-12-19',
-  },
-  {
-    id: '2',
-    name: 'HIIT Cardio Blast',
-    type: 'HIIT',
-    difficulty: 'Advanced',
-    duration: 30,
-    calories: 400,
-    date: '2024-12-18',
-  },
-  // Add more mock workouts as needed
-]
+  const totalMinutes = await prisma.workout.aggregate({
+    where: { userId },
+    _sum: {
+      duration: true
+    }
+  });
 
-export default function WorkoutsPage() {
-  const [filter, setFilter] = useState('')
-  const [loading] = useState(false)
+  const recentWorkouts = await prisma.workout.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    include: {
+      exercises: {
+        include: {
+          exercise: true
+        }
+      }
+    }
+  });
 
-  const filteredWorkouts = mockWorkouts.filter(
-    (workout) =>
-      workout.name.toLowerCase().includes(filter.toLowerCase()) ||
-      workout.type.toLowerCase().includes(filter.toLowerCase())
-  )
+  return {
+    totalWorkouts,
+    totalMinutes: totalMinutes._sum.duration || 0,
+    recentWorkouts
+  };
+}
+
+async function getWorkouts(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  if (!user) return null;
+
+  const workouts = await prisma.workout.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+    include: {
+      exercises: {
+        include: {
+          exercise: true,
+        },
+      },
+    },
+  });
+
+  const stats = await getWorkoutStats(user.id);
+
+  return { workouts, stats };
+}
+
+export default async function WorkoutsPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return null;
+
+  const data = await getWorkouts(session.user.email);
+  if (!data) return null;
+
+  const { workouts, stats } = data;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-6 space-y-8">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Your Workouts</h1>
-          <p className="mt-1 text-sm text-gray-400">
-            View and manage your workout history
-          </p>
+          <h1 className="text-3xl font-bold">Your Workouts</h1>
+          <p className="text-muted-foreground mt-1">Track and manage your fitness journey</p>
         </div>
-        <Link
-          href="/dashboard/workouts/new"
-          className="inline-flex items-center rounded-md bg-primary-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
-        >
-          New Workout
+        <Link href="/dashboard/workouts/new">
+          <Button>
+            <PlusCircle className="h-4 w-4 mr-2" />
+            Create New Workout
+          </Button>
         </Link>
       </div>
 
-      <div className="flex items-center space-x-4">
-        <div className="flex-1">
-          <label htmlFor="search" className="sr-only">
-            Search workouts
-          </label>
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <svg
-                className="h-5 w-5 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-            <input
-              type="search"
-              name="search"
-              id="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="block w-full rounded-md border-0 bg-background py-1.5 pl-10 pr-3 text-white placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-500 sm:text-sm sm:leading-6"
-              placeholder="Search workouts..."
-            />
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="p-6">
+          <div className="flex items-center space-x-2">
+            <Activity className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-medium">Total Workouts</h3>
           </div>
-        </div>
+          <p className="text-2xl font-bold mt-2">{stats.totalWorkouts}</p>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center space-x-2">
+            <Clock className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-medium">Total Time</h3>
+          </div>
+          <p className="text-2xl font-bold mt-2">{Math.round(stats.totalMinutes / 60)} hours</p>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center space-x-2">
+            <Target className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-medium">Recent Streak</h3>
+          </div>
+          <p className="text-2xl font-bold mt-2">
+            {/* Calculate streak based on consecutive days */}
+            {calculateStreak(stats.recentWorkouts)} days
+          </p>
+        </Card>
       </div>
 
-      {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <LoadingSpinner className="h-8 w-8" />
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-lg bg-background-secondary shadow">
-          <ul role="list" className="divide-y divide-gray-700">
-            {filteredWorkouts.map((workout) => (
-              <li key={workout.id}>
-                <Link
-                  href={`/dashboard/workouts/${workout.id}`}
-                  className="block hover:bg-background"
-                >
-                  <div className="px-4 py-4 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="flex-shrink-0">
-                          <svg
-                            className="h-6 w-6 text-primary-500"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                            />
-                          </svg>
-                        </div>
-                        <p className="truncate text-sm font-medium text-white">
-                          {workout.name}
-                        </p>
-                      </div>
-                      <div className="ml-2 flex flex-shrink-0">
-                        <p className="inline-flex rounded-full bg-primary-500/10 px-2 text-xs font-semibold leading-5 text-primary-500">
-                          {workout.type}
-                        </p>
-                      </div>
+      {/* Workouts List */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {workouts.map((workout) => (
+          <Link
+            key={workout.id}
+            href={`/dashboard/workouts/${workout.id}`}
+            className="block"
+          >
+            <Card className="p-6 hover:bg-accent transition-colors">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="font-semibold text-lg">{workout.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {formatDistanceToNow(new Date(workout.createdAt), { addSuffix: true })}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-1 text-primary">
+                  <Dumbbell className="h-5 w-5" />
+                  <span className="text-sm font-medium">{workout.exercises.length}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4 mr-2" />
+                  {workout.duration} minutes
+                </div>
+
+                <div className="text-sm">
+                  {workout.exercises.slice(0, 2).map((ex) => (
+                    <div key={ex.id} className="flex items-center text-muted-foreground">
+                      <span className="w-2 h-2 rounded-full bg-primary/50 mr-2" />
+                      {ex.exercise.name}
                     </div>
-                    <div className="mt-2 sm:flex sm:justify-between">
-                      <div className="sm:flex">
-                        <p className="flex items-center text-sm text-gray-400">
-                          <svg
-                            className="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
-                            />
-                          </svg>
-                          {workout.difficulty}
-                        </p>
-                        <p className="mt-2 flex items-center text-sm text-gray-400 sm:mt-0 sm:ml-6">
-                          <svg
-                            className="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          {workout.duration} minutes
-                        </p>
-                        <p className="mt-2 flex items-center text-sm text-gray-400 sm:mt-0 sm:ml-6">
-                          <svg
-                            className="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M13 10V3L4 14h7v7l9-11h-7z"
-                            />
-                          </svg>
-                          {workout.calories} kcal
-                        </p>
-                      </div>
-                      <div className="mt-2 flex items-center text-sm text-gray-400 sm:mt-0">
-                        <svg
-                          className="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
-                        <p>{workout.date}</p>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                  ))}
+                  {workout.exercises.length > 2 && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      +{workout.exercises.length - 2} more exercises
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </Link>
+        ))}
+      </div>
     </div>
-  )
+  );
+}
+
+function calculateStreak(recentWorkouts: any[]): number {
+  if (!recentWorkouts.length) return 0;
+
+  let streak = 1;
+  let currentDate = new Date(recentWorkouts[0].createdAt);
+  currentDate.setHours(0, 0, 0, 0);
+
+  for (let i = 1; i < recentWorkouts.length; i++) {
+    const workoutDate = new Date(recentWorkouts[i].createdAt);
+    workoutDate.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.floor((currentDate.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      streak++;
+      currentDate = workoutDate;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
 }

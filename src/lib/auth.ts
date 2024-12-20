@@ -1,9 +1,27 @@
 import { PrismaAdapter } from "@auth/prisma-adapter"
-import { NextAuthOptions } from "next-auth"
+import type { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "./prisma"
 import bcrypt from "bcryptjs"
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+    };
+  }
+
+  interface User {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -49,42 +67,37 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
-          image: user.image,
         }
       },
     }),
   ],
   callbacks: {
     async session({ token, session }) {
-      if (token) {
-        session.user.id = token.id
+      if (token && session.user) {
+        session.user.id = token.id as string
         session.user.name = token.name
         session.user.email = token.email
-        session.user.image = token.picture
       }
-
       return session
     },
-    async jwt({ token, user }) {
-      const dbUser = await prisma.user.findFirst({
-        where: {
-          email: token.email,
-        },
-      })
-
-      if (!dbUser) {
-        if (user) {
-          token.id = user?.id
-        }
-        return token
+    async jwt({ token, user, account }) {
+      if (user) {
+        // This will only be executed when the user logs in
+        token.id = user.id
+      } else if (!token.id && token.email) {
+        // If we don't have an ID but we have an email (Google login),
+        // try to find or create the user
+        const dbUser = await prisma.user.upsert({
+          where: { email: token.email },
+          create: {
+            email: token.email,
+            name: token.name,
+          },
+          update: {},
+        })
+        token.id = dbUser.id
       }
-
-      return {
-        id: dbUser.id,
-        name: dbUser.name,
-        email: dbUser.email,
-        picture: dbUser.image,
-      }
+      return token
     },
   },
 }
